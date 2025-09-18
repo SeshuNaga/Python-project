@@ -15,8 +15,7 @@ spec:
       containers:
       - name: fastapi
         image: localhost:5001/fastapi-psql-service:latest
-        # Use IfNotPresent for local registry images
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: IfNotPresent   # ✅ Use local image if present
         ports:
         - containerPort: 8000
         env:
@@ -25,7 +24,7 @@ spec:
         - name: DB_PASS
           value: "postgres"
         - name: DB_HOST
-          value: "postgres"
+          value: "postgres"           # matches Postgres service name
         - name: DB_PORT
           value: "5432"
         - name: DB_NAME
