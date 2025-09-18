@@ -2,15 +2,12 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = "localhost:5001"
+        REGISTRY = "localhost:5001"   // Use localhost for k3d local registry
         IMAGE_NAME = "fastapi-psql-service"
         IMAGE_TAG = "latest"
         K8S_DIR = "k8s"
-        // Ensure Docker is in PATH
         PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        // Disable BuildKit to avoid creds helper
         DOCKER_BUILDKIT = "0"
-        // Optional: use a temporary Docker config to ignore osxkeychain
         DOCKER_CONFIG = "/tmp/docker-config"
     }
 
