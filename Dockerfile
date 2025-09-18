@@ -1,18 +1,22 @@
-# Use official Python image
-FROM python:3.9-alpine
+# Stage 1 - build dependencies
+FROM python:3.10-alpine as builder
 
-# Set working directory inside container
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Stage 2 - minimal runtime
+FROM python:3.10-alpine
+
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy installed packages from builder stage
+COPY --from=builder /root/.local /root/.local
 
-# Copy source code
+# Update PATH so Python finds packages
+ENV PATH=/root/.local/bin:$PATH
+
 COPY . .
 
-# Expose FastAPI default port
 EXPOSE 8000
-
-# Run the app with Uvicorn
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

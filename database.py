@@ -3,8 +3,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Replace with your DB details
 DB_USER = "postgres"
-DB_PASS = "password"
-DB_HOST = "host.docker.internal"
+DB_PASS = "postgres"
+DB_HOST = "postgres"
 DB_PORT = "5432"
 DB_NAME = "testdb"
 
