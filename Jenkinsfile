@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = "python-project1.localhost:5001"
+        REGISTRY = "localhost:5001"
         IMAGE_NAME = "fastapi-psql-service"
         IMAGE_TAG = "latest"
         K8S_DIR = "k8s"
-         // Ensure Docker is in PATH
+        // Ensure Docker is in PATH
         PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         // Disable BuildKit to avoid creds helper
         DOCKER_BUILDKIT = "0"
