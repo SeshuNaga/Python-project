@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: localhost:5001/fastapi-psql-service:latest
+        image: fastapi-psql-service:latest
         imagePullPolicy: IfNotPresent   # ✅ Use local image if present
         ports:
         - containerPort: 8000
