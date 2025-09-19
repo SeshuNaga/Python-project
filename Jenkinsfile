@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        # k3d registry DNS name (check with: k3d registry list)
         REGISTRY = "myregistry.localhost:5000"
         IMAGE_NAME = "fastapi-psql-service"
         IMAGE_TAG = "latest"
