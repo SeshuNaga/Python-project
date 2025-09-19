@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = "myregistry.localhost:5000"
+        REGISTRY = "k3d-myregistry.localhost:5000"
         IMAGE_NAME = "fastapi-psql-service"
         IMAGE_TAG = "latest"
         K8S_DIR = "k8s"

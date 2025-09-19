@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: myregistry.localhost:5000/fastapi-psql-service:latest
+        image: k3d-myregistry.localhost:5000/fastapi-psql-service:latest
         imagePullPolicy: IfNotPresent   # ✅ Use local image if present
         ports:
         - containerPort: 8000
