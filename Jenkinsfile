@@ -2,11 +2,9 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_REPO = "dockerhub-username/fastapi-psql-service"
-        IMAGE_TAG      = "latest"
-        K8S_DIR        = "k8s"
+        DOCKERHUB_REPO = "seshubommineni/python-project"  // Your Docker Hub repo
+        IMAGE_TAG      = "latest"                          // Tag for the image
         PATH           = "/usr/local/bin:/usr/bin:/bin"
-        DOCKER_BUILDKIT = "0"
     }
 
     stages {
@@ -16,44 +14,35 @@ pipeline {
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
-                        def img = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
-                        img.push()   
-                    }
+                    echo "🚀 Building Docker image..."
+                    def img = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
                 }
             }
         }
 
-        stage('Update K8s Manifests') {
+        stage('Login & Push to Docker Hub') {
             steps {
-                sh """
-                echo "🔧 Updating Deployment image reference..."
-                sed -i.bak "s|image:.*|image: $DOCKERHUB_REPO:$IMAGE_TAG|" $K8S_DIR/fastapi.yaml
-                """
-            }
-        }
-
-        stage('Deploy to K3D') {
-            steps {
-                sh """
-                echo "🚀 Deploying to k3d cluster..."
-                kubectl apply -f $K8S_DIR/postgres.yaml
-                kubectl apply -f $K8S_DIR/fastapi.yaml
-                kubectl rollout status deployment/fastapi
-                """
+                script {
+                    // Use Docker Hub credentials stored in Jenkins
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
+                        echo "📦 Pushing image to Docker Hub..."
+                        def img = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
+                        img.push()
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Deployment successful!"
+            echo "✅ Docker image successfully pushed to Docker Hub!"
         }
         failure {
-            echo "❌ Deployment failed. Check logs."
+            echo "❌ Docker push failed. Check the logs."
         }
     }
 }
