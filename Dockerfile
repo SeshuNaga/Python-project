@@ -1,12 +1,12 @@
 # Stage 1 - build dependencies
-FROM python:3.10-alpine as builder
+FROM python:3.10-slim as builder
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2 - minimal runtime
-FROM python:3.10-alpine
+FROM python:3.10-slim
 
 WORKDIR /app
 
