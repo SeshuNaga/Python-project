@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: localhost:5000/fastapi-psql-service:latest
-        imagePullPolicy: IfNotPresent
+        image: seshubommineni/python-project:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:

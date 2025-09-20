@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_REPO = "seshubommineni/python-project"  // Your Docker Hub repo
-        IMAGE_TAG      = "latest"                          // Tag for the image
-        PATH           = "/usr/local/bin:/usr/bin:/bin"    // Ensure Jenkins can find Docker
+        DOCKERHUB_REPO = "seshubommineni/python-project"
+        IMAGE_TAG      = "latest"
+        PATH           = "/usr/local/bin:/usr/bin:/bin"   // Ensure Jenkins can find Docker and kubectl
+        K8S_DIR        = "k8s"                            // Kubernetes manifests folder
     }
 
     stages {
@@ -18,8 +19,7 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Building Docker image..."
-                    // Build the image locally
-                    def img = sh(script: "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .", returnStdout: true)
+                    sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
                 }
             }
         }
@@ -39,14 +39,29 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    echo "🚀 Deploying PostgreSQL..."
+                    sh "kubectl apply -f ${K8S_DIR}/postgres.yaml"
+
+                    echo "🚀 Deploying FastAPI..."
+                    sh "kubectl apply -f ${K8S_DIR}/fastapi.yaml"
+
+                    echo "⏳ Waiting for FastAPI deployment to be ready..."
+                    sh "kubectl rollout status deployment fastapi"
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo "✅ Docker image successfully pushed to Docker Hub!"
+            echo "✅ Docker image pushed and Kubernetes deployment successful!"
         }
         failure {
-            echo "❌ Docker push failed. Check logs."
+            echo "❌ Pipeline failed. Check logs."
         }
     }
 }
