@@ -1,11 +1,12 @@
 pipeline {
     agent any
 
+  
     environment {
-        REGISTRY     = "myregistry.localhost:5000"   // ✅ Correct registry for k3d
-        IMAGE_NAME   = "fastapi-psql-service"
-        IMAGE_TAG    = "latest"
-        K8S_DIR      = "k8s"
+        REGISTRY = "localhost:5000"
+        IMAGE_NAME = "fastapi-psql-service"
+        IMAGE_TAG = "latest"
+        K8S_DIR = "k8s"
 
         PATH         = "/usr/local/bin:/usr/bin:/bin"   // Ensure docker/kubectl available
         DOCKER_BUILDKIT = "0"
