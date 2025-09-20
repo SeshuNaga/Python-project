@@ -2,12 +2,12 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = "localhost:5000"             // k3d registry accessible from Jenkins pod
-        IMAGE_NAME = "fastapi-psql-service"
-        IMAGE_TAG = "latest"
-        K8S_DIR = "k8s"
+        REGISTRY     = "myregistry.localhost:5000"   // ✅ Correct registry for k3d
+        IMAGE_NAME   = "fastapi-psql-service"
+        IMAGE_TAG    = "latest"
+        K8S_DIR      = "k8s"
 
-        PATH = "/usr/local/bin:/usr/bin:/bin"   // Make sure docker/kubectl are in PATH
+        PATH         = "/usr/local/bin:/usr/bin:/bin"   // Ensure docker/kubectl available
         DOCKER_BUILDKIT = "0"
     }
 
@@ -30,7 +30,7 @@ pipeline {
         stage('Push to Local Registry') {
             steps {
                 sh """
-                echo "📦 Pushing image to k3d registry..."
+                echo "📦 Pushing image to local k3d registry..."
                 docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
                 """
             }
@@ -49,10 +49,9 @@ pipeline {
             steps {
                 sh """
                 echo "🚀 Deploying to k3d cluster..."
-                # Make sure kubectl uses the in-cluster config if running inside Jenkins pod
                 kubectl apply -f $K8S_DIR/postgres.yaml
                 kubectl apply -f $K8S_DIR/fastapi.yaml
-                kubectl rollout status deployment fastapi
+                kubectl rollout status deployment/fastapi
                 """
             }
         }

@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: k3d-myregistry.localhost:5000/fastapi-psql-service:latest
-        imagePullPolicy: IfNotPresent   # ✅ Use local image if present
+        image: myregistry.localhost:5000/fastapi-psql-service:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         env:
@@ -24,7 +24,7 @@ spec:
         - name: DB_PASS
           value: "postgres"
         - name: DB_HOST
-          value: "postgres"           # matches Postgres service name
+          value: "postgres"
         - name: DB_PORT
           value: "5432"
         - name: DB_NAME
