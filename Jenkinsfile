@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
         IMAGE_TAG      = "latest"
-        PATH           = "/usr/local/bin:/usr/bin:/bin"
+        PATH = "/usr/local/bin:/usr/bin:/bin"
     }
 
     stages {
