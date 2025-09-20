@@ -1,14 +1,11 @@
 pipeline {
     agent any
 
-  
     environment {
-        REGISTRY = "localhost:5000"
-        IMAGE_NAME = "fastapi-psql-service"
-        IMAGE_TAG = "latest"
-        K8S_DIR = "k8s"
-
-        PATH         = "/usr/local/bin:/usr/bin:/bin"   // Ensure docker/kubectl available
+        DOCKERHUB_REPO = "dockerhub-username/fastapi-psql-service"
+        IMAGE_TAG      = "latest"
+        K8S_DIR        = "k8s"
+        PATH           = "/usr/local/bin:/usr/bin:/bin"
         DOCKER_BUILDKIT = "0"
     }
 
@@ -19,21 +16,14 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build and Push Docker Image') {
             steps {
-                sh """
-                echo "🚀 Building Docker image..."
-                docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
-                """
-            }
-        }
-
-        stage('Push to Local Registry') {
-            steps {
-                sh """
-                echo "📦 Pushing image to local k3d registry..."
-                docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-                """
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-creds') {
+                        def img = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
+                        img.push()   
+                    }
+                }
             }
         }
 
@@ -41,7 +31,7 @@ pipeline {
             steps {
                 sh """
                 echo "🔧 Updating Deployment image reference..."
-                sed -i.bak "s|image:.*|image: $REGISTRY/$IMAGE_NAME:$IMAGE_TAG|" $K8S_DIR/fastapi.yaml
+                sed -i.bak "s|image:.*|image: $DOCKERHUB_REPO:$IMAGE_TAG|" $K8S_DIR/fastapi.yaml
                 """
             }
         }
