@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
-        IMAGE_TAG      = "latest"
+        IMAGE_TAG      = "build-${BUILD_NUMBER}"   // Unique image tag per build
         PATH           = "/usr/local/bin:/usr/bin:/bin"   // Ensure Jenkins can find Docker
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
         FLUX_BRANCH    = "main"
@@ -20,7 +20,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    echo "🚀 Building Docker image..."
+                    echo "🚀 Building Docker image with tag ${IMAGE_TAG}..."
                     sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
                 }
             }
@@ -36,7 +36,7 @@ pipeline {
                         sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
                     }
 
-                    echo "📦 Pushing image to Docker Hub..."
+                    echo "📦 Pushing image ${IMAGE_TAG} to Docker Hub..."
                     sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
                 }
             }
@@ -66,7 +66,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Docker image pushed and Flux repo updated on main branch!"
+            echo "✅ Docker image ${IMAGE_TAG} pushed and Flux repo updated on main branch!"
         }
         failure {
             echo "❌ Pipeline failed. Check logs."
