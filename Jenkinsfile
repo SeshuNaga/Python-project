@@ -49,14 +49,14 @@ pipeline {
                     git fetch origin
 
                     # Delete local release branch if exists
-                    git branch -D release 2>/dev/null || true
-
-                    # Checkout release branch safely
-                    if git ls-remote --exit-code --heads origin release; then
-                        git checkout -b release origin/release
-                    else
-                        git checkout -b release
+                    if git show-ref --verify --quiet refs/heads/release; then
+                        git branch -D release
                     fi
+
+                    # Start release branch fresh from latest main
+                    git checkout main
+                    git pull origin main
+                    git checkout -b release
 
                     # Update fastapi.yaml using Python (cross-platform)
                     python3 - <<EOF
@@ -81,7 +81,7 @@ EOF
                     # Commit and push changes to release branch
                     git add manifests/fastapi.yaml
                     git commit -m "Update FastAPI image to ${IMAGE_TAG}"
-                    git push origin release
+                    git push origin release --force
 
                     # Create PR to merge release into main using GitHub CLI
                     PR_URL=$(gh pr create --title "Update FastAPI image to ${IMAGE_TAG}" \
