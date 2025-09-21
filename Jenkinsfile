@@ -3,47 +3,46 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
-        K8S_DIR        = "k8s"
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
         IMAGE_TAG      = "${BUILD_NUMBER}" // Jenkins build number
-        PATH           = "/usr/local/bin:/usr/bin:/bin:$PATH"
+        PYTHON_REPO    = "https://github.com/SeshuNaga/Python-project.git"
     }
 
     stages {
-
-        stage('Checkout Code') {
+        stage('Checkout Python Source') {
             steps {
-                git branch: 'main', url: 'https://github.com/SeshuNaga/Python-project.git'
+                dir('python-project') {
+                    git branch: 'main', url: "${PYTHON_REPO}"
+                }
             }
         }
-
         stage('Build & Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
                                                  passwordVariable: 'DOCKER_PASS',
                                                  usernameVariable: 'DOCKER_USER')]) {
-                    sh '''
-                    echo "🔑 Logging into Docker Hub"
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    echo "🐳 Building Docker image"
-                    docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
-                    echo "📤 Pushing Docker image"
-                    docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-                    '''
+                    dir('python-project') {
+                        sh '''
+                        echo "Logging into Docker Hub"
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        echo "Building Docker image"
+                        docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
+                        echo "Pushing Docker image"
+                        docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                        '''
+                    }
                 }
             }
         }
-
         stage('Update Flux Repo & Create PR') {
             steps {
                 withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GITHUB_TOKEN')]) {
-                    script {
+                    dir('fluxrepo') {
                         sh '''
                         # Clone Flux repo if not exists
-                        if [ ! -d fluxrepo ]; then
-                            git clone ${FLUX_REPO}
+                        if [ ! -d .git ]; then
+                            git clone ${FLUX_REPO} .
                         fi
-                        cd fluxrepo
                         git fetch origin
                         git checkout main
                         git pull origin main
@@ -52,7 +51,7 @@ pipeline {
                         git branch -D release || true
                         git checkout -b release
 
-                        # Update fastapi.yaml image using sed
+                        # Update fastapi.yaml image using sed and remove backup
                         sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|" manifests/fastapi.yaml
                         rm -f manifests/fastapi.yaml.bak
 
@@ -77,14 +76,13 @@ pipeline {
                             PR_URL="$EXISTING_PR"
                         fi
 
-                        echo "✅ PR created or exists: ${PR_URL}"
+                        echo "PR created or exists: ${PR_URL}"
                         '''
                     }
                 }
             }
         }
     }
-
     post {
         success {
             echo "✅ Docker image pushed, Flux repo updated, PR created successfully!"
