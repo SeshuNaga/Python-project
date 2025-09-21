@@ -14,7 +14,7 @@ pipeline {
             steps {
                 git branch: 'main', url: 'https://github.com/SeshuNaga/Python-project.git'
                 script {
-                    IMAGE_TAG = "${env.BUILD_NUMBER}" // Unique build ID
+                    IMAGE_TAG = "${env.BUILD_NUMBER}" // Unique build ID per Jenkins build
                 }
             }
         }
@@ -39,7 +39,7 @@ pipeline {
         stage('Update Flux Repo & Create PR') {
             steps {
                 script {
-                    sh """
+                    sh '''
                     # Clone the Flux repo if not already present
                     if [ ! -d fluxrepo ]; then
                         git clone ${FLUX_REPO}
@@ -51,22 +51,22 @@ pipeline {
                     git checkout -B release origin/release || git checkout -b release
 
                     # Update the image tag in fastapi.yaml
-                    sed -i 's|image: seshubommineni/python-project:.*|image: seshubommineni/python-project:${IMAGE_TAG}|' manifests/fastapi.yaml
+                    sed -i 's|image: seshubommineni/python-project:.*|image: seshubommineni/python-project:'"${IMAGE_TAG}"'|' manifests/fastapi.yaml
 
                     # Commit and push changes to release branch
                     git add manifests/fastapi.yaml
-                    git commit -m "Update FastAPI image to ${IMAGE_TAG}"
+                    git commit -m "Update FastAPI image to '"${IMAGE_TAG}"'"
                     git push origin release
 
                     # Create PR to merge release into main using GitHub CLI
-                    PR_URL=$(gh pr create --title "Update FastAPI image to ${IMAGE_TAG}" \
-                          --body "Automatic image update from Jenkins build ${BUILD_NUMBER}" \
+                    PR_URL=$(gh pr create --title "Update FastAPI image to '"${IMAGE_TAG}"'" \
+                          --body "Automatic image update from Jenkins build '"${BUILD_NUMBER}"'" \
                           --base main \
                           --head release \
                           --json url -q .url)
 
                     echo "PR_URL=${PR_URL}" > pr_url.env
-                    """
+                    '''
                 }
             }
         }
@@ -76,7 +76,7 @@ pipeline {
                 script {
                     def prUrl = readFile('fluxrepo/pr_url.env').trim().split('=')[1]
                     echo "PR created: ${prUrl}"
-                    // Example: send email
+                    // Send email notification to users
                     emailext(
                         subject: "New PR created for FastAPI image ${IMAGE_TAG}",
                         body: "A new PR has been created: ${prUrl}",
