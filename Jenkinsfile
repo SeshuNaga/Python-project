@@ -36,6 +36,13 @@ pipeline {
             }
         }
 
+        stage('Ensure PyYAML Installed') {
+            steps {
+                // Install PyYAML if not present
+                sh 'pip3 install --user pyyaml || true'
+            }
+        }
+
         stage('Update Flux Repo & Create PR') {
             steps {
                 script {
