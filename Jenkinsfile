@@ -1,101 +1,86 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKERHUB_REPO = "seshubommineni/python-project"
-    FLUX_REPO      = "SeshuNaga/fluxrepo"
-    IMAGE_TAG      = "${BUILD_NUMBER}"
-    FLUX_FILE_PATH = "manifests/fastapi.yaml"
-  }
+    environment {
+        DOCKERHUB_REPO = "seshubommineni/python-project"
+        IMAGE_TAG      = "latest"
+        K8S_DIR        = "k8s"
+        FLUX_REPO      = "SeshuNaga/fluxrepo"   // Flux repo (GitHub)
+    }
 
-  stages {
-    stage('Build & Push Docker Image') {
-      steps {
-        withCredentials([
-          usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
-        ]) {
-          sh '''
-            echo "Build tag = $IMAGE_TAG"
-            docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
-            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-            docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-          '''
+    stages {
+        stage('Checkout App Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/SeshuNaga/Python-project.git'
+            }
         }
-      }
-    }
 
-    stage('Update Flux Repo & Create PR') {
-      steps {
-        withCredentials([
-          string(credentialsId: 'GITHUB_TOKEN', variable: 'GITHUB_TOKEN')
-        ]) {
-          script {
-            sh '''
-              set -e
+        stage('Build & Push Docker Image') {
+            steps {
+                script {
+                    echo "🚀 Building Docker image..."
+                    sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
 
-              # Clone fluxrepo
-              rm -rf fluxrepo
-              git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${FLUX_REPO}.git
-              cd fluxrepo
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                     passwordVariable: 'DOCKER_PASS',
+                                                     usernameVariable: 'DOCKER_USER')]) {
+                        echo "🔑 Logging in to Docker Hub..."
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    }
 
-              git checkout main
-              git pull origin main
-
-              # Delete local release branch if it exists
-              if git show-ref --verify --quiet refs/heads/release; then
-                git branch -D release
-              fi
-
-              git checkout -b release
-
-              # Update the image tag in fastapi.yaml
-              sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|g" ${FLUX_FILE_PATH}
-              rm -f ${FLUX_FILE_PATH}.bak
-
-              git add ${FLUX_FILE_PATH}
-              if git diff --cached --quiet; then
-                echo "No changes to commit; image already up-to-date"
-                PR_URL="NO_CHANGES"
-              else
-                git commit -m "Update FastAPI image to ${IMAGE_TAG}"
-                git push origin release --force
-
-                # Create PR via GitHub API with correct head format
-                PR_URL=$(curl -s -X POST \
-                  -H "Authorization: token ${GITHUB_TOKEN}" \
-                  -H "Accept: application/vnd.github+json" \
-                  https://api.github.com/repos/${FLUX_REPO}/pulls \
-                  -d "{\"title\":\"Update FastAPI image to ${IMAGE_TAG}\",\"head\":\"SeshuNaga:release\",\"base\":\"main\",\"body\":\"Automatic image update from build ${IMAGE_TAG}\"}" \
-                  | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
-              fi
-
-              echo "PR_URL=${PR_URL}" > ../pr_url.env
-            '''
-          }
+                    echo "📦 Pushing image to Docker Hub..."
+                    sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+                }
+            }
         }
-      }
-    }
 
-    stage('Print PR URL') {
-      steps {
-        script {
-          def props = readFile('pr_url.env').trim().tokenize('=')  // expects format "PR_URL=..."
-          if (props.size() == 2 && props[1] != "NO_CHANGES") {
-            echo "✅ Pull Request URL: ${props[1]}"
-          } else {
-            echo "ℹ️ No new PR created (no changes)."
-          }
+        stage('Update Flux Repo') {
+            steps {
+                script {
+                    echo "📂 Cloning Flux repo..."
+                    sh """
+                        rm -rf fluxrepo
+                        git clone https://github.com/${FLUX_REPO}.git
+                        cd fluxrepo
+                        git checkout -B release
+                        
+                        # Update FastAPI deployment manifest with new image
+                        sed -i 's|image:.*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|' ${K8S_DIR}/fastapi.yaml
+                        
+                        git config user.email "jenkins@pipeline.com"
+                        git config user.name "Jenkins CI"
+                        git add ${K8S_DIR}/fastapi.yaml
+                        git commit -m "Update FastAPI image to ${IMAGE_TAG}" || echo "No changes to commit"
+                        git push origin release --force
+                    """
+                }
+            }
         }
-      }
-    }
-  }
 
-  post {
-    success {
-      echo "Pipeline completed successfully."
+        stage('Create/Update Pull Request') {
+            steps {
+                script {
+                    echo "🔀 Creating or updating PR..."
+                    sh """
+                        gh pr create \
+                          --repo ${FLUX_REPO} \
+                          --head release \
+                          --base main \
+                          --title "Update FastAPI image to ${IMAGE_TAG}" \
+                          --body "Automatic image update from Jenkins build"
+                        || echo "PR already exists"
+                    """
+                }
+            }
+        }
     }
-    failure {
-      echo "Pipeline failed."
+
+    post {
+        success {
+            echo "✅ Docker image built, pushed, and PR created in Flux repo!"
+        }
+        failure {
+            echo "❌ Pipeline failed. Check logs."
+        }
     }
-  }
 }
