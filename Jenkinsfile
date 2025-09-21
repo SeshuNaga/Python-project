@@ -4,30 +4,37 @@ pipeline {
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
         PATH           = "/usr/local/bin:/usr/bin:/bin"
+        K8S_DIR        = "k8s"
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
     }
 
     stages {
-
-        stage('Checkout Source Code') {
+        stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/SeshuNaga/Python-project.git'
                 script {
-                    IMAGE_TAG = "${env.BUILD_NUMBER}" // unique build id
+                    IMAGE_TAG = "${env.BUILD_NUMBER}" // Unique build ID per Jenkins build
+                    echo "Build tag will be: ${IMAGE_TAG}"
                 }
             }
         }
 
-        stage('Build & Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', 
-                                                 usernameVariable: 'DOCKER_USER', 
+                echo "Building Docker image ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+                sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Login & Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                 usernameVariable: 'DOCKER_USER',
                                                  passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
+                    sh '''
                         docker login -u $DOCKER_USER -p $DOCKER_PASS
-                        docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
                         docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-                    """
+                    '''
                 }
             }
         }
@@ -36,8 +43,8 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GITHUB_TOKEN')]) {
                     script {
-                        sh """
-                        # Clone or fetch flux repo
+                        sh '''
+                        # Clone or update flux repo
                         if [ ! -d fluxrepo ]; then
                             git clone ${FLUX_REPO}
                         fi
@@ -46,39 +53,35 @@ pipeline {
                         git checkout main
                         git pull origin main
 
-                        # Delete old release branch and create new
+                        # Delete old release branch if exists
                         if git show-ref --verify --quiet refs/heads/release; then
                             git branch -D release
                         fi
                         git checkout -b release
 
-                        # Update fastapi.yaml image
+                        # Update fastapi.yaml with new image tag
                         sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|g" manifests/fastapi.yaml
                         rm -f manifests/fastapi.yaml.bak
 
-                        git add manifests/fastapi.yaml
+                        # Commit and push changes
+                        git add -A
                         git commit -m "Update FastAPI image to ${IMAGE_TAG}" || echo "No changes to commit"
                         git push origin release --force
 
-                        # Check for existing PR
-                        EXISTING_PR=\$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                        # Create PR safely using jq for proper JSON
+                        DATA=$(jq -n --arg title "Update FastAPI image to ${IMAGE_TAG}" \
+                                      --arg head "release" \
+                                      --arg base "main" \
+                                      --arg body "Automatic image update from Jenkins build ${BUILD_NUMBER}" \
+                                      '{title:$title, head:$head, base:$base, body:$body}')
+
+                        PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
                             -H "Accept: application/vnd.github+json" \
-                            "https://api.github.com/repos/SeshuNaga/fluxrepo/pulls?head=SeshuNaga:release&base=main" \
-                            | python3 -c "import sys,json; prs=json.load(sys.stdin); print(prs[0]['html_url'] if prs else '')")
+                            https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
+                            -d "$DATA" | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
 
-                        # Create PR if not exists
-                        if [ -z "\$EXISTING_PR" ]; then
-                            PR_URL=\$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
-                                -H "Accept: application/vnd.github+json" \
-                                https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
-                                -d "{\\"title\\":\\"Update FastAPI image to ${IMAGE_TAG}\\",\\"head\\":\\"release\\",\\"base\\":\\"main\\",\\"body\\":\\"Automatic image update from Jenkins build ${BUILD_NUMBER}\\"}" \
-                                | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
-                        else
-                            PR_URL=\$EXISTING_PR
-                        fi
-
-                        echo "PR_URL=\$PR_URL" > pr_url.env
-                        """
+                        echo "PR_URL=${PR_URL}" > pr_url.env
+                        '''
                     }
                 }
             }
@@ -96,10 +99,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully."
+            echo "✅ Docker image pushed, Flux repo updated, PR created successfully!"
         }
         failure {
-            echo "Pipeline failed."
+            echo "❌ Pipeline failed. Check logs."
         }
     }
 }
