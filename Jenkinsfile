@@ -114,7 +114,7 @@ EOF
                     emailext(
                         subject: "New PR created for FastAPI image ${IMAGE_TAG}",
                         body: "A new PR has been created: ${prUrl}",
-                        to: "team@example.com"
+                        to: "bommineninagaseshu@gmail.com"
                     )
                 }
             }
