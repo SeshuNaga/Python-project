@@ -48,14 +48,16 @@ pipeline {
 
                     git fetch origin
 
+                    # Ensure we are on main before deleting release branch
+                    git checkout main
+                    git pull origin main
+
                     # Delete local release branch if exists
                     if git show-ref --verify --quiet refs/heads/release; then
                         git branch -D release
                     fi
 
-                    # Start release branch fresh from latest main
-                    git checkout main
-                    git pull origin main
+                    # Create fresh release branch from main
                     git checkout -b release
 
                     # Update fastapi.yaml using Python (cross-platform)
