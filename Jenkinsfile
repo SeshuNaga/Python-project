@@ -54,20 +54,14 @@ pipeline {
                         cd fluxrepo
 
                         git fetch origin
-
-                        # Ensure we are on main before deleting release branch
                         git checkout main
                         git pull origin main
 
                         # Delete local release branch if exists
-                        if git show-ref --verify --quiet refs/heads/release; then
-                            git branch -D release
-                        fi
-
-                        # Create fresh release branch
+                        git branch -D release || true
                         git checkout -b release
 
-                        # Update fastapi.yaml using Python (fixed snippet)
+                        # Update fastapi.yaml using Python
                         python3 - <<EOF
 import yaml
 file_path = 'manifests/fastapi.yaml'
@@ -89,36 +83,20 @@ with open(file_path, 'w') as f:
     yaml.dump_all(docs, f)
 EOF
 
-                        # Commit and push changes to release branch
                         git add manifests/fastapi.yaml
                         git commit -m "Update FastAPI image to ${IMAGE_TAG}"
                         git push origin release --force
 
-                        # Create PR via GitHub API (safe JSON for macOS & Linux)
+                        # Create PR via GitHub API
                         PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
                             -H "Accept: application/vnd.github+json" \
                             https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
                             -d "{\"title\":\"Update FastAPI image to ${IMAGE_TAG}\",\"head\":\"release\",\"base\":\"main\",\"body\":\"Automatic image update from Jenkins build ${BUILD_NUMBER}\"}" \
                             | python3 -c "import sys, json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
 
-                        echo "PR_URL=${PR_URL}" > pr_url.env
+                        echo "PR created: ${PR_URL}"
                         '''
                     }
-                }
-            }
-        }
-
-        stage('Send PR URL Notification') {
-            steps {
-                script {
-                    def prUrl = readFile('fluxrepo/pr_url.env').trim().split('=')[1]
-                    echo "PR created: ${prUrl}"
-                    // Replace with your email plugin configuration
-                    emailext(
-                        subject: "New PR created for FastAPI image ${IMAGE_TAG}",
-                        body: "A new PR has been created: ${prUrl}",
-                        to: "team@example.com"
-                    )
                 }
             }
         }
