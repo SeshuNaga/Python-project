@@ -23,11 +23,11 @@ pipeline {
                                                  passwordVariable: 'DOCKER_PASS',
                                                  usernameVariable: 'DOCKER_USER')]) {
                     sh '''
-                    echo "Logging into Docker Hub"
-                    docker login -u "$DOCKER_USER" -p "$DOCKER_PASS"
-                    echo "Building Docker image"
+                    echo "🔑 Logging into Docker Hub"
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    echo "🐳 Building Docker image"
                     docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
-                    echo "Pushing Docker image"
+                    echo "📤 Pushing Docker image"
                     docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
                     '''
                 }
@@ -52,7 +52,7 @@ pipeline {
                         git branch -D release || true
                         git checkout -b release
 
-                        # Update fastapi.yaml image using sed and remove backup
+                        # Update fastapi.yaml image using sed
                         sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|" manifests/fastapi.yaml
                         rm -f manifests/fastapi.yaml.bak
 
@@ -77,7 +77,7 @@ pipeline {
                             PR_URL="$EXISTING_PR"
                         fi
 
-                        echo "PR created: ${PR_URL}"
+                        echo "✅ PR created or exists: ${PR_URL}"
                         '''
                     }
                 }
