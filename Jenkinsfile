@@ -92,12 +92,12 @@ EOF
                         git commit -m "Update FastAPI image to ${IMAGE_TAG}"
                         git push origin release --force
 
-                        # Create PR via GitHub API
+                        # Create PR via GitHub API (safe JSON for macOS & Linux)
                         PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
                             -H "Accept: application/vnd.github+json" \
                             https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
                             -d "{\"title\":\"Update FastAPI image to ${IMAGE_TAG}\",\"head\":\"release\",\"base\":\"main\",\"body\":\"Automatic image update from Jenkins build ${BUILD_NUMBER}\"}" \
-                            | python3 -c "import sys, json; print(json.load(sys.stdin)['html_url'])")
+                            | python3 -c "import sys, json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
 
                         echo "PR_URL=${PR_URL}" > pr_url.env
                         '''
