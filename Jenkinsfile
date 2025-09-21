@@ -52,20 +52,30 @@ pipeline {
                         git branch -D release || true
                         git checkout -b release
 
-                        # Update fastapi.yaml image using sed
+                        # Update fastapi.yaml image using sed and remove backup
                         sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|" manifests/fastapi.yaml
+                        rm -f manifests/fastapi.yaml.bak
 
                         # Commit and push changes
                         git add manifests/fastapi.yaml
                         git commit -m "Update FastAPI image to ${IMAGE_TAG}" || echo "No changes to commit"
                         git push origin release --force
 
-                        # Create PR via GitHub API
-                        PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \\
-                            -H "Accept: application/vnd.github+json" \\
-                            https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \\
-                            -d "{\\"title\\":\\"Update FastAPI image to ${IMAGE_TAG}\\",\\"head\\":\\"release\\",\\"base\\":\\"main\\",\\"body\\":\\"Automatic image update from Jenkins build ${BUILD_NUMBER}\\"}" \\
-                            | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
+                        # Check if PR already exists
+                        EXISTING_PR=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                            -H "Accept: application/vnd.github+json" \
+                            "https://api.github.com/repos/SeshuNaga/fluxrepo/pulls?head=SeshuNaga:release&base=main" \
+                            | python3 -c "import sys,json; prs=json.load(sys.stdin); print(prs[0]['html_url'] if prs else '')")
+
+                        if [ -z "$EXISTING_PR" ]; then
+                            PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
+                                -H "Accept: application/vnd.github+json" \
+                                https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
+                                -d "{\\"title\\":\\"Update FastAPI image to ${IMAGE_TAG}\\",\\"head\\":\\"release\\",\\"base\\":\\"main\\",\\"body\\":\\"Automatic image update from Jenkins build ${BUILD_NUMBER}\\"}" \
+                                | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
+                        else
+                            PR_URL="$EXISTING_PR"
+                        fi
 
                         echo "PR created: ${PR_URL}"
                         '''
