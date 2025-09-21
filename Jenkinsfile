@@ -38,37 +38,37 @@ pipeline {
 
         stage('Ensure PyYAML Installed') {
             steps {
-                // Install PyYAML if not present
                 sh 'pip3 install --user pyyaml || true'
             }
         }
 
         stage('Update Flux Repo & Create PR') {
             steps {
-                script {
-                    sh '''
-                    # Clone the Flux repo if not already present
-                    if [ ! -d fluxrepo ]; then
-                        git clone ${FLUX_REPO}
-                    fi
-                    cd fluxrepo
+                withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GITHUB_TOKEN')]) {
+                    script {
+                        sh '''
+                        # Clone Flux repo if not exists
+                        if [ ! -d fluxrepo ]; then
+                            git clone ${FLUX_REPO}
+                        fi
+                        cd fluxrepo
 
-                    git fetch origin
+                        git fetch origin
 
-                    # Ensure we are on main before deleting release branch
-                    git checkout main
-                    git pull origin main
+                        # Ensure we are on main before deleting release branch
+                        git checkout main
+                        git pull origin main
 
-                    # Delete local release branch if exists
-                    if git show-ref --verify --quiet refs/heads/release; then
-                        git branch -D release
-                    fi
+                        # Delete local release branch if exists
+                        if git show-ref --verify --quiet refs/heads/release; then
+                            git branch -D release
+                        fi
 
-                    # Create fresh release branch from main
-                    git checkout -b release
+                        # Create fresh release branch
+                        git checkout -b release
 
-                    # Update fastapi.yaml using Python (cross-platform)
-                    python3 - <<EOF
+                        # Update fastapi.yaml using Python
+                        python3 - <<EOF
 import yaml
 file_path = 'manifests/fastapi.yaml'
 image_tag = '${IMAGE_TAG}'
@@ -87,20 +87,21 @@ with open(file_path, 'w') as f:
     yaml.dump_all(docs, f)
 EOF
 
-                    # Commit and push changes to release branch
-                    git add manifests/fastapi.yaml
-                    git commit -m "Update FastAPI image to ${IMAGE_TAG}"
-                    git push origin release --force
+                        # Commit and push changes to release branch
+                        git add manifests/fastapi.yaml
+                        git commit -m "Update FastAPI image to ${IMAGE_TAG}"
+                        git push origin release --force
 
-                    # Create PR to merge release into main using GitHub CLI
-                    PR_URL=$(gh pr create --title "Update FastAPI image to ${IMAGE_TAG}" \
-                          --body "Automatic image update from Jenkins build ${BUILD_NUMBER}" \
-                          --base main \
-                          --head release \
-                          --json url -q .url)
+                        # Create PR via GitHub API
+                        PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
+                            -H "Accept: application/vnd.github+json" \
+                            https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
+                            -d "{\"title\":\"Update FastAPI image to ${IMAGE_TAG}\",\"head\":\"release\",\"base\":\"main\",\"body\":\"Automatic image update from Jenkins build ${BUILD_NUMBER}\"}" \
+                            | python3 -c "import sys, json; print(json.load(sys.stdin)['html_url'])")
 
-                    echo "PR_URL=${PR_URL}" > pr_url.env
-                    '''
+                        echo "PR_URL=${PR_URL}" > pr_url.env
+                        '''
+                    }
                 }
             }
         }
@@ -110,7 +111,6 @@ EOF
                 script {
                     def prUrl = readFile('fluxrepo/pr_url.env').trim().split('=')[1]
                     echo "PR created: ${prUrl}"
-                    // Send email notification
                     emailext(
                         subject: "New PR created for FastAPI image ${IMAGE_TAG}",
                         body: "A new PR has been created: ${prUrl}",
