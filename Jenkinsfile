@@ -46,14 +46,21 @@ pipeline {
                     fi
                     cd fluxrepo
 
-                    # Checkout release branch (create if not exists)
                     git fetch origin
-                    git checkout -B release origin/release || git checkout -b release
 
-                    # Update the image tag in fastapi.yaml using Python (cross-platform)
+                    # Delete local release branch if exists
+                    git branch -D release 2>/dev/null || true
+
+                    # Checkout release branch safely
+                    if git ls-remote --exit-code --heads origin release; then
+                        git checkout -b release origin/release
+                    else
+                        git checkout -b release
+                    fi
+
+                    # Update fastapi.yaml using Python (cross-platform)
                     python3 - <<EOF
 import yaml
-
 file_path = 'manifests/fastapi.yaml'
 image_tag = '${IMAGE_TAG}'
 
@@ -94,7 +101,7 @@ EOF
                 script {
                     def prUrl = readFile('fluxrepo/pr_url.env').trim().split('=')[1]
                     echo "PR created: ${prUrl}"
-                    // Send email notification to users
+                    // Send email notification
                     emailext(
                         subject: "New PR created for FastAPI image ${IMAGE_TAG}",
                         body: "A new PR has been created: ${prUrl}",
