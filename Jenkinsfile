@@ -3,9 +3,9 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
-        PATH           = "/usr/local/bin:/usr/bin:/bin"
         K8S_DIR        = "k8s"
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
+        IMAGE_TAG      = "${BUILD_NUMBER}" // Jenkins build number
     }
 
     stages {
@@ -13,32 +13,20 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/SeshuNaga/Python-project.git'
-                script {
-                    IMAGE_TAG = "${env.BUILD_NUMBER}" // Unique build ID per Jenkins build
-                }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
-                sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
-            }
-        }
-
-        stage('Login & Push to Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', 
-                                                 passwordVariable: 'DOCKER_PASS', 
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                 passwordVariable: 'DOCKER_PASS',
                                                  usernameVariable: 'DOCKER_USER')]) {
-                    sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
-                    sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+                    sh """
+                    docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
+                    docker login -u $DOCKER_USER -p $DOCKER_PASS
+                    docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                    """
                 }
-            }
-        }
-
-        stage('Ensure PyYAML Installed') {
-            steps {
-                sh 'pip3 install --user pyyaml || true'
             }
         }
 
@@ -46,56 +34,37 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GITHUB_TOKEN')]) {
                     script {
-                        sh '''
+                        sh """
                         # Clone Flux repo if not exists
                         if [ ! -d fluxrepo ]; then
                             git clone ${FLUX_REPO}
                         fi
                         cd fluxrepo
-
                         git fetch origin
                         git checkout main
                         git pull origin main
 
-                        # Delete local release branch if exists
+                        # Delete or create release branch
                         git branch -D release || true
                         git checkout -b release
 
-                        # Update fastapi.yaml using Python
-                        python3 - <<EOF
-import yaml
-file_path = 'manifests/fastapi.yaml'
-image_tag = '${IMAGE_TAG}'
+                        # Update fastapi.yaml image using sed
+                        sed -i.bak "s|image: 'seshubommineni/python-project:.*'|image: 'seshubommineni/python-project:${IMAGE_TAG}'|" manifests/fastapi.yaml
 
-with open(file_path, 'r') as f:
-    docs = list(yaml.safe_load_all(f))
-
-for doc in docs:
-    try:
-        containers = doc['spec']['template']['spec']['containers']
-        for c in containers:
-            if c.get('name') == 'fastapi':
-                c['image'] = f'seshubommineni/python-project:{image_tag}'
-    except KeyError:
-        continue
-
-with open(file_path, 'w') as f:
-    yaml.dump_all(docs, f)
-EOF
-
+                        # Commit and push changes
                         git add manifests/fastapi.yaml
-                        git commit -m "Update FastAPI image to ${IMAGE_TAG}"
+                        git commit -m "Update FastAPI image to ${IMAGE_TAG}" || echo "No changes to commit"
                         git push origin release --force
 
                         # Create PR via GitHub API
-                        PR_URL=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
-                            -H "Accept: application/vnd.github+json" \
-                            https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \
-                            -d "{\"title\":\"Update FastAPI image to ${IMAGE_TAG}\",\"head\":\"release\",\"base\":\"main\",\"body\":\"Automatic image update from Jenkins build ${BUILD_NUMBER}\"}" \
-                            | python3 -c "import sys, json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
+                        PR_URL=\$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" \\
+                            -H "Accept: application/vnd.github+json" \\
+                            https://api.github.com/repos/SeshuNaga/fluxrepo/pulls \\
+                            -d "{\\"title\\":\\"Update FastAPI image to ${IMAGE_TAG}\\",\\"head\\":\\"release\\",\\"base\\":\\"main\\",\\"body\\":\\"Automatic image update from Jenkins build ${BUILD_NUMBER}\\"}" \\
+                            | python3 -c "import sys,json; resp=json.load(sys.stdin); print(resp.get('html_url','ERROR_CREATING_PR'))")
 
-                        echo "PR created: ${PR_URL}"
-                        '''
+                        echo "PR created: \${PR_URL}"
+                        """
                     }
                 }
             }
