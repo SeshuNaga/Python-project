@@ -4,9 +4,10 @@ pipeline {
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
         IMAGE_TAG      = "latest"
-        PATH           = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"  // Include gh & docker
+        PATH           = "/usr/local/bin:/usr/bin:/bin"   // Ensure Jenkins can find Docker
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
-        FLUX_DIR       = "fluxrepo"
+        FLUX_BRANCH    = "main"
+        K8S_DIR        = "manifests"
     }
 
     stages {
@@ -18,63 +19,46 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo "🚀 Building Docker image..."
-                sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                script {
+                    echo "🚀 Building Docker image..."
+                    sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                }
             }
         }
 
         stage('Login & Push to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', 
-                                                 passwordVariable: 'DOCKER_PASS', 
-                                                 usernameVariable: 'DOCKER_USER')]) {
+                script {
                     echo "🔑 Logging in to Docker Hub..."
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', 
+                                                     usernameVariable: 'DOCKER_USER', 
+                                                     passwordVariable: 'DOCKER_PASS')]) {
+                        sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
+                    }
+
+                    echo "📦 Pushing image to Docker Hub..."
+                    sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
                 }
-                echo "📦 Pushing image to Docker Hub..."
-                sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
             }
         }
 
-        stage('Update Flux Repo & Create PR') {
+        stage('Update Flux Repo') {
             steps {
-                // Use GH_TOKEN from Jenkins Credentials
-                withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GH_TOKEN')]) {
-                    sh '''
-                        set -e
+                script {
+                    echo "📥 Cloning Flux repo..."
+                    sh "rm -rf fluxrepo"
+                    sh "git clone ${FLUX_REPO} fluxrepo"
+                    sh "cd fluxrepo && git checkout ${FLUX_BRANCH}"
 
-                        # Clone flux repo if not exists
-                        if [ ! -d ${FLUX_DIR} ]; then
-                            git clone ${FLUX_REPO} ${FLUX_DIR}
-                        fi
-
-                        cd ${FLUX_DIR}
-                        git fetch origin
-                        git checkout -B release origin/main || git checkout -B release
-
-                        # Update fastapi.yaml image
-                        sed -i.bak "s|image: '.*'|image: '${DOCKERHUB_REPO}:${IMAGE_TAG}'|g" manifests/fastapi.yaml
-                        rm -f manifests/fastapi.yaml.bak
-
-                        git add manifests/fastapi.yaml
-                        if git diff --cached --quiet; then
-                            echo "No changes to commit"
-                        else
-                            git commit -m "Update FastAPI image to ${IMAGE_TAG}"
-                            git push origin release --force
-                        fi
-
-                        # Check existing PR
-                        EXISTING_PR=$(gh pr list --head release --base main --json url -q '.[0].url')
-                        if [ -z "$EXISTING_PR" ]; then
-                            echo "No existing PR, creating a new one..."
-                            gh pr create --title "Update FastAPI image to ${IMAGE_TAG}" \
-                                         --body "Automatic image update from Jenkins build ${IMAGE_TAG}" \
-                                         --head release --base main
-                        else
-                            echo "Existing PR: $EXISTING_PR"
-                        fi
-                    '''
+                    echo "📝 Updating FastAPI image in manifests..."
+                    sh """
+                        cd fluxrepo
+                        sed -i.bak 's|image:.*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|g' ${K8S_DIR}/fastapi.yaml
+                        rm -f ${K8S_DIR}/fastapi.yaml.bak
+                        git add ${K8S_DIR}/fastapi.yaml
+                        git commit -m 'Update FastAPI image to ${IMAGE_TAG}' || echo 'No changes to commit'
+                        git push origin ${FLUX_BRANCH} --force
+                    """
                 }
             }
         }
@@ -82,7 +66,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Docker image pushed, Flux repo updated, PR created successfully!"
+            echo "✅ Docker image pushed and Flux repo updated on main branch!"
         }
         failure {
             echo "❌ Pipeline failed. Check logs."
