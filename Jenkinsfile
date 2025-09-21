@@ -4,9 +4,9 @@ pipeline {
     environment {
         DOCKERHUB_REPO = "seshubommineni/python-project"
         IMAGE_TAG      = "latest"
-        PATH           = "/usr/local/bin:/usr/bin:/bin" // Ensure Docker & gh CLI are found
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
         FLUX_DIR       = "fluxrepo"
+        PATH           = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"  // Include gh and docker
     }
 
     stages {
@@ -28,16 +28,15 @@ pipeline {
         stage('Login & Push to Docker Hub') {
             steps {
                 script {
+                    echo "🔑 Logging in to Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', 
-                                                     usernameVariable: 'DOCKER_USER', 
-                                                     passwordVariable: 'DOCKER_PASS')]) {
-                        sh """
-                            echo "🔑 Logging into Docker Hub..."
-                            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                            echo "📦 Pushing image to Docker Hub..."
-                            docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-                        """
+                                                     passwordVariable: 'DOCKER_PASS', 
+                                                     usernameVariable: 'DOCKER_USER')]) {
+                        sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
                     }
+
+                    echo "📦 Pushing image to Docker Hub..."
+                    sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
                 }
             }
         }
@@ -48,6 +47,9 @@ pipeline {
                     script {
                         sh """
                             set -e
+                            # Ensure Homebrew binaries are in PATH
+                            export PATH=/opt/homebrew/bin:\$PATH
+
                             # Clone or update flux repo
                             if [ -d "${FLUX_DIR}" ]; then
                                 cd ${FLUX_DIR}
@@ -100,7 +102,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Docker image pushed and Flux repo PR created successfully!"
+            echo "✅ Docker image pushed and PR created successfully!"
         }
         failure {
             echo "❌ Pipeline failed. Check logs."
