@@ -50,17 +50,35 @@ pipeline {
                     git fetch origin
                     git checkout -B release origin/release || git checkout -b release
 
-                    # Update the image tag in fastapi.yaml
-                    sed -i 's|image: seshubommineni/python-project:.*|image: seshubommineni/python-project:'"${IMAGE_TAG}"'|' manifests/fastapi.yaml
+                    # Update the image tag in fastapi.yaml using Python (cross-platform)
+                    python3 - <<EOF
+import yaml
+
+file_path = 'manifests/fastapi.yaml'
+image_tag = '${IMAGE_TAG}'
+
+with open(file_path, 'r') as f:
+    docs = list(yaml.safe_load_all(f))
+
+for doc in docs:
+    if 'spec' in doc and 'template' in doc['spec'] and 'spec' in doc['spec']['template']:
+        containers = doc['spec']['template']['spec'].get('containers', [])
+        for c in containers:
+            if c.get('name') == 'fastapi':
+                c['image'] = f'seshubommineni/python-project:{image_tag}'
+
+with open(file_path, 'w') as f:
+    yaml.dump_all(docs, f)
+EOF
 
                     # Commit and push changes to release branch
                     git add manifests/fastapi.yaml
-                    git commit -m "Update FastAPI image to '"${IMAGE_TAG}"'"
+                    git commit -m "Update FastAPI image to ${IMAGE_TAG}"
                     git push origin release
 
                     # Create PR to merge release into main using GitHub CLI
-                    PR_URL=$(gh pr create --title "Update FastAPI image to '"${IMAGE_TAG}"'" \
-                          --body "Automatic image update from Jenkins build '"${BUILD_NUMBER}"'" \
+                    PR_URL=$(gh pr create --title "Update FastAPI image to ${IMAGE_TAG}" \
+                          --body "Automatic image update from Jenkins build ${BUILD_NUMBER}" \
                           --base main \
                           --head release \
                           --json url -q .url)
