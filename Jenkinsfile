@@ -67,7 +67,7 @@ pipeline {
                         # Create fresh release branch
                         git checkout -b release
 
-                        # Update fastapi.yaml using Python
+                        # Update fastapi.yaml using Python (fixed snippet)
                         python3 - <<EOF
 import yaml
 file_path = 'manifests/fastapi.yaml'
@@ -77,11 +77,13 @@ with open(file_path, 'r') as f:
     docs = list(yaml.safe_load_all(f))
 
 for doc in docs:
-    if 'spec' in doc and 'template' in doc['spec'] and 'spec' in doc['spec']['template']:
-        containers = doc['spec']['template']['spec'].get('containers', [])
+    try:
+        containers = doc['spec']['template']['spec']['containers']
         for c in containers:
             if c.get('name') == 'fastapi':
                 c['image'] = f'seshubommineni/python-project:{image_tag}'
+    except KeyError:
+        continue
 
 with open(file_path, 'w') as f:
     yaml.dump_all(docs, f)
@@ -111,10 +113,11 @@ EOF
                 script {
                     def prUrl = readFile('fluxrepo/pr_url.env').trim().split('=')[1]
                     echo "PR created: ${prUrl}"
+                    // Replace with your email plugin configuration
                     emailext(
                         subject: "New PR created for FastAPI image ${IMAGE_TAG}",
                         body: "A new PR has been created: ${prUrl}",
-                        to: "bommineninagaseshu@gmail.com"
+                        to: "team@example.com"
                     )
                 }
             }
