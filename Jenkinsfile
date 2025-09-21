@@ -6,7 +6,7 @@ pipeline {
         IMAGE_TAG      = "latest"
         FLUX_REPO      = "https://github.com/SeshuNaga/fluxrepo.git"
         FLUX_DIR       = "fluxrepo"
-        GITHUB_TOKEN   = credentials('github-token')  // GitHub token stored in Jenkins
+        GITHUB_TOKEN   = credentials('GITHUB_TOKEN')  // GitHub token stored in Jenkins
     }
 
     stages {
